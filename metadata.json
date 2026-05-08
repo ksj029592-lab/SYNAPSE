@@ -1,0 +1,14 @@
+{
+  "name": "InsightHub: Intelligent Second Brain",
+  "description": "A sophisticated knowledge management tool for researchers and students featuring AI-powered summarization, semantic note-linking, and a dual-pane viewer.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI Summarization",
+    "Vector Search",
+    "Note-taking",
+    "PDF Viewer"
+  ]
+}
