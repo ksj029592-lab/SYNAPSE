@@ -203,15 +203,36 @@ function NoteBlockComponent({ block, onUpdate, onRemove, onBringToFront, onAIIns
             <div className="flex items-center bg-white border border-slate-200 rounded-lg px-0.5 mr-1 overflow-hidden shadow-sm">
               <button 
                 title="Bold (Ctrl+B)"
-                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); document.execCommand('bold'); }}
-                className="p-1 px-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                onMouseDown={(e) => { 
+                  e.preventDefault(); 
+                  e.stopPropagation(); 
+                  const isBold = document.queryCommandState('bold');
+                  document.execCommand('bold', false);
+                }}
+                className={cn(
+                  "p-1 px-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors",
+                  document.queryCommandState('bold') && "text-indigo-600 bg-indigo-50"
+                )}
               >
                 <Bold className="w-3.5 h-3.5" />
               </button>
               <button 
                 title="Highlight"
-                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); document.execCommand('backColor', false, '#fef08a'); }}
-                className="p-1 px-1.5 text-slate-500 hover:text-indigo-600 hover:bg-yellow-100 rounded transition-colors"
+                onMouseDown={(e) => { 
+                  e.preventDefault(); 
+                  e.stopPropagation(); 
+                  const currentColor = document.queryCommandValue('backColor');
+                  // Check if it's our highlight color (rgb(254, 240, 138) is #fef08a)
+                  if (currentColor === 'rgb(254, 240, 138)' || currentColor === '#fef08a') {
+                    document.execCommand('backColor', false, 'transparent');
+                  } else {
+                    document.execCommand('backColor', false, '#fef08a');
+                  }
+                }}
+                className={cn(
+                  "p-1 px-1.5 text-slate-500 hover:text-indigo-600 hover:bg-yellow-100 rounded transition-colors",
+                  (document.queryCommandValue('backColor') === 'rgb(254, 240, 138)' || document.queryCommandValue('backColor') === '#fef08a') && "text-indigo-600 bg-yellow-200"
+                )}
               >
                 <Highlighter className="w-3.5 h-3.5" />
               </button>
@@ -714,6 +735,7 @@ function Workspace({
   setCurrentMasterNoteId: (id: string | null) => void
 }) {
   const [activeSidebarTab, setActiveSidebarTab] = useState<'archive' | 'notes'>('archive');
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
   const [notes, setNotes] = useState<NoteBlock[]>(() => {
     const saved = localStorage.getItem('synapse_current_workspace_notes');
     return saved ? JSON.parse(saved) : [{ id: '1', content: '', x: 50, y: 50, width: 320, height: 240, fontSize: 13, zIndex: 1, title: '시작하기' }];
@@ -883,13 +905,23 @@ function Workspace({
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">지식 아카이브</h3>
                 <span className="text-[9px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-black uppercase">{documents.length} NODES</span>
               </div>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+              <div className="relative group/search">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within/search:text-indigo-500 transition-colors" />
                 <input 
                   type="text" 
                   placeholder="자료 탐색 및 드래그..." 
-                  className="w-full bg-gray-100 border-none rounded-xl py-2 pl-8 pr-3 text-[11px] outline-none focus:ring-2 focus:ring-indigo-100 transition-all font-medium" 
+                  value={sidebarSearchQuery}
+                  onChange={(e) => setSidebarSearchQuery(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-9 pr-10 text-[11px] outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-200 transition-all font-medium" 
                 />
+                {sidebarSearchQuery && (
+                  <button 
+                    onClick={() => setSidebarSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
             </div>
             
@@ -903,11 +935,16 @@ function Workspace({
                   <p className="text-[9px] text-gray-400 mt-2 leading-relaxed">상단 지식 아카이브 탭에서 <br/>학습 자료를 추가하세요.</p>
                 </div>
               ) : (
-                documents.map((item) => (
-                  <div 
-                    key={item.id} 
-                    draggable
-                    onDragStart={(e) => {
+                documents
+                  .filter(doc => 
+                    doc.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase()) || 
+                    doc.keywords?.some(k => k.toLowerCase().includes(sidebarSearchQuery.toLowerCase()))
+                  )
+                  .map((item) => (
+                    <div 
+                      key={item.id} 
+                      draggable
+                      onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', item.content);
                       e.dataTransfer.setData('title', item.title);
                       const ghost = document.createElement('div');
@@ -946,7 +983,19 @@ function Workspace({
           </>
         ) : (
           <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar min-h-0 bg-white">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">저장된 마스터 노트</h3>
+            <div className="mb-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">저장된 마스터 노트</h3>
+              <div className="relative group/note-search">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 group-focus-within/note-search:text-indigo-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="노드 검색..." 
+                  value={sidebarSearchQuery}
+                  onChange={(e) => setSidebarSearchQuery(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2 pl-9 pr-3 text-[11px] outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-200 transition-all font-medium" 
+                />
+              </div>
+            </div>
             {!masterNotes || masterNotes.length === 0 ? (
               <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-3xl bg-gray-50/50">
                 <p className="text-[10px] text-gray-400 font-bold">저장된 마스터 노트가 없습니다.</p>
@@ -958,9 +1007,11 @@ function Workspace({
                 onReorder={setMasterNotes} 
                 className="space-y-3 pb-8"
               >
-                {masterNotes.map((m) => (
-                  <Reorder.Item 
-                    key={m.id}
+                {masterNotes
+                  .filter(m => m.title.toLowerCase().includes(sidebarSearchQuery.toLowerCase()))
+                  .map((m) => (
+                    <Reorder.Item 
+                      key={m.id}
                     value={m}
                     className={cn(
                       "p-4 rounded-2xl border transition-all relative group bg-white shadow-sm",
@@ -1221,11 +1272,34 @@ export default function App() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200 w-72 items-center">
-            <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-500 mr-2 font-bold">검색</span>
-            <input type="text" placeholder="저장된 지식 검색..." className="bg-transparent text-xs outline-none w-full" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <div className="relative group/header-search">
+            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 w-72 focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-200 focus-within:bg-white transition-all shadow-sm">
+              <Search size={14} className="text-gray-400 mr-2 shrink-0 group-focus-within/header-search:text-indigo-500" />
+              <input 
+                type="text" 
+                placeholder="지식 허브 검색..." 
+                className="bg-transparent text-xs outline-none w-full font-medium" 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="p-1 hover:bg-gray-200 rounded text-gray-400 ml-1 shrink-0"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            {/* Search Button for visual recognition */}
+            <button 
+              className="absolute -right-2 top-1/2 -translate-y-1/2 translate-x-full px-4 py-2 bg-indigo-600 text-white text-[10px] font-black rounded-xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all opacity-0 pointer-events-none group-focus-within/header-search:opacity-100 group-focus-within/header-search:pointer-events-auto"
+              onClick={() => {/* Actual search is reactive via value filtering, this button just reinforces the UI */}}
+            >
+              검색실행
+            </button>
           </div>
-          <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-black text-[10px]">SYN</div>
+          <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-black text-[10px] ml-12">SYN</div>
         </div>
       </header>
       <main className="flex flex-1 overflow-hidden relative">
